@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gym Tracker</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #121212;
+            --surface: #1e1e1e;
+            --card: #2a2a2a;
+            --primary: #4CAF50;
+            --primary-dark: #388E3C;
+            --text: #ffffff;
+            --text-sec: #b0b0b0;
+            --input-bg: #333333;
+            --border: #444444;
+            --danger: #f44336;
+            --blue: #2196F3;
+        }
+
+        html, body {
+            height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 16px;
+            -webkit-tap-highlight-color: transparent;
+            overflow: hidden;
+        }
+
+        #app {
+            max-width: 520px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ===== HEADER ===== */
+        .header {
+            background: var(--surface);
+            padding: 14px 20px;
+            text-align: center;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .header h1 { font-size: 20px; font-weight: 700; color: var(--primary); }
+        .header .sub { font-size: 12px; color: var(--text-sec); margin-top: 2px; }
+
+        /* ===== BUTTONS ===== */
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 12px 24px; border: none; border-radius: 8px;
+            font-size: 16px; font-weight: 600; cursor: pointer;
+            transition: all 0.15s; -webkit-tap-highlight-color: transparent;
+        }
+        .btn:active { transform: scale(0.97); }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:active { background: var(--primary-dark); }
+        .btn-outline { background: transparent; color: var(--primary); border: 2px solid var(--primary); }
+        .btn-danger  { background: transparent; color: var(--danger);  border: 2px solid var(--danger); }
+        .btn-copy    { background: var(--blue); color: #fff; }
+        .btn-full    { width: 100%; }
+
+        /* ===== LOAD SCREEN ===== */
+        .load-screen {
+            flex: 1; padding: 20px; display: flex;
+            flex-direction: column; gap: 14px; overflow: hidden;
+        }
+        .load-screen .info {
+            color: var(--text-sec); font-size: 14px; line-height: 1.5;
+        }
+        .load-screen .info code {
+            color: var(--primary); font-size: 13px;
+        }
+        .load-screen textarea {
+            flex: 1; min-height: 200px; background: var(--input-bg);
+            color: var(--text); border: 1px solid var(--border);
+            border-radius: 8px; padding: 12px; font-size: 14px;
+            font-family: monospace; resize: none;
+        }
+        .load-screen textarea::placeholder { color: #666; }
+        .error { color: var(--danger); font-size: 14px; min-height: 20px; }
+
+        /* ===== DAY TABS ===== */
+        .day-tabs {
+            display: flex; overflow-x: auto; background: var(--surface);
+            padding: 8px 12px; gap: 8px; flex-shrink: 0;
+            scrollbar-width: none;
+        }
+        .day-tabs::-webkit-scrollbar { display: none; }
+        .day-tab {
+            flex-shrink: 0; padding: 8px 16px; border-radius: 20px;
+            background: var(--card); color: var(--text-sec);
+            font-size: 13px; font-weight: 600; cursor: pointer;
+            border: none; transition: all 0.15s;
+        }
+        .day-tab.active { background: var(--primary); color: #fff; }
+        .day-tab .ck { margin-left: 4px; font-size: 11px; }
+
+        /* ===== EXERCISE LIST ===== */
+        .exercise-list {
+            flex: 1; overflow-y: auto; padding: 12px;
+            display: flex; flex-direction: column; gap: 10px;
+            padding-bottom: 76px;
+        }
+        .exercise-card {
+            background: var(--card); border-radius: 12px; padding: 14px;
+        }
+        .exercise-card .ord {
+            display: inline-block; background: var(--primary); color: #fff;
+            width: 24px; height: 24px; border-radius: 50%;
+            text-align: center; line-height: 24px; font-size: 12px;
+            font-weight: 700; margin-right: 8px; vertical-align: middle;
+        }
+        .exercise-card .nm {
+            font-size: 15px; font-weight: 600; vertical-align: middle;
+        }
+        .exercise-card .det {
+            margin-top: 8px; font-size: 13px; color: var(--text-sec); line-height: 1.4;
+        }
+        .exercise-card .reps-row {
+            margin-top: 10px; display: flex; align-items: center; gap: 8px;
+        }
+        .exercise-card .reps-lbl {
+            font-size: 13px; font-weight: 600; color: var(--primary); white-space: nowrap;
+        }
+        .exercise-card input {
+            flex: 1; background: var(--input-bg); color: var(--text);
+            border: 1px solid var(--border); border-radius: 6px;
+            padding: 8px 12px; font-size: 15px; font-family: monospace;
+        }
+        .exercise-card input:focus { outline: none; border-color: var(--primary); }
+        .exercise-card input::placeholder {
+            color: #555; font-family: sans-serif; font-size: 13px;
+        }
+
+        /* ===== BOTTOM BAR ===== */
+        .bottom-bar {
+            position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+            width: 100%; max-width: 520px; background: var(--surface);
+            border-top: 1px solid var(--border); padding: 10px 14px;
+            display: flex; gap: 8px; z-index: 10;
+        }
+        .bottom-bar .btn { flex: 1; padding: 10px 6px; font-size: 13px; }
+
+        /* ===== WEEK VIEW ===== */
+        .week-view {
+            flex: 1; padding: 16px; display: flex;
+            flex-direction: column; gap: 14px; overflow: hidden;
+        }
+        .week-view pre {
+            flex: 1; background: var(--card); color: var(--text);
+            border-radius: 8px; padding: 16px; font-size: 13px;
+            line-height: 1.6; overflow-y: auto; white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .week-view .acts { display: flex; gap: 8px; flex-shrink: 0; }
+        .week-view .acts .btn { flex: 1; }
+
+        /* ===== TOAST ===== */
+        .toast {
+            position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+            background: var(--primary); color: #fff; padding: 10px 24px;
+            border-radius: 24px; font-size: 14px; font-weight: 600;
+            opacity: 0; transition: opacity 0.3s; z-index: 100;
+            pointer-events: none;
+        }
+        .toast.show { opacity: 1; }
+
+        /* ===== HISTORY SCREEN ===== */
+        .history-screen {
+            flex: 1; padding: 16px; display: flex;
+            flex-direction: column; gap: 12px; overflow: hidden;
+        }
+        .history-list {
+            flex: 1; overflow-y: auto; display: flex;
+            flex-direction: column; gap: 8px;
+        }
+        .history-item {
+            background: var(--card); border-radius: 10px; padding: 14px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .history-item .hi-info { font-size: 14px; }
+        .history-item .hi-date { font-size: 12px; color: var(--text-sec); margin-top: 2px; }
+        .history-item .hi-actions { display: flex; gap: 6px; }
+        .history-item .hi-btn {
+            padding: 6px 12px; border-radius: 6px; border: none;
+            font-size: 12px; font-weight: 600; cursor: pointer;
+        }
+        .hi-btn-load { background: var(--primary); color: #fff; }
+        .hi-btn-del  { background: var(--danger); color: #fff; }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+    <div id="toast" class="toast"></div>
+
+    <script>
+    /* =========================================================
+       STATE
+       ========================================================= */
+    const KEY = 'gymtracker_data';
+    const HIST_KEY = 'gymtracker_history';
+
+    let state = { screen: 'load', days: [], selectedDay: 0 };
+    let history = []; // array of { id, label, days, savedAt }
+
+    function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
+    function saveHistory() { localStorage.setItem(HIST_KEY, JSON.stringify(history)); }
+
+    function load() {
+        try {
+            const s = JSON.parse(localStorage.getItem(KEY));
+            if (s && s.days && s.days.length) { Object.assign(state, s); state.screen = 'tracker'; return true; }
+        } catch(e) {}
+        return false;
+    }
+    function loadHistory() {
+        try { history = JSON.parse(localStorage.getItem(HIST_KEY)) || []; } catch(e) { history = []; }
+    }
+
+    /* =========================================================
+       PARSER — convierte el texto pegado en estructura de datos
+       ========================================================= */
+    function parseRoutine(text) {
+        const lines = text.split('\n');
+        const days = [];
+        let cur = null;
+
+        for (let raw of lines) {
+            const line = raw.trim();
+            if (!line || /^-{2,}$/.test(line)) continue;
+
+            // Día: ### **LUNES  o  ### LUNES  o  **LUNES  etc.
+            const dayM = line.match(/^#{0,3}\s*\*{0,2}\s*([A-ZÁÉÍÓÚÑÜ]+)\s*\*{0,2}\s*$/i);
+            if (dayM) {
+                cur = { name: dayM[1].toUpperCase(), exercises: [] };
+                days.push(cur);
+                continue;
+            }
+
+            if (!cur) continue;
+
+            // Ejercicio: 1. **Nombre:** series x reps | Peso: xxx
+            let clean = line.replace(/\*\*/g, '');
+            if (!/^\d+\./.test(clean)) continue;
+
+            const pipeIdx = clean.indexOf('|');
+            if (pipeIdx === -1) continue;
+
+            const left  = clean.substring(0, pipeIdx).trim();
+            const right = clean.substring(pipeIdx + 1).trim();
+
+            const ordM = left.match(/^(\d+)\.\s*/);
+            if (!ordM) continue;
+
+            const order = parseInt(ordM[1]);
+            const rest  = left.substring(ordM[0].length);
+
+            // Separar nombre de series/reps por el primer ": <dígito>"
+            const colM = rest.match(/^(.+?):\s*(\d.+)$/);
+            if (!colM) continue;
+
+            const name     = colM[1].trim();
+            const expected = colM[2].trim();
+
+            const wM = right.match(/^Peso:\s*(.+)$/i);
+            const weight = wM ? wM[1].trim() : right.trim();
+
+            cur.exercises.push({ order, name, expected, weight, done: '' });
+        }
+        return days;
+    }
+
+    /* =========================================================
+       GENERATE WEEK TEXT  (formato de salida ≈ input)
+       ========================================================= */
+    function genText() {
+        let t = '';
+        for (let i = 0; i < state.days.length; i++) {
+            const d = state.days[i];
+            if (i > 0) t += '\n---\n\n';
+            t += '### **' + d.name + '**\n\n';
+            for (const e of d.exercises) {
+                t += e.order + '. **' + e.name + ':** ' + e.expected + ' | Peso: ' + e.weight;
+                if (e.done && e.done.trim()) t += ' | Hecho: ' + e.done.trim();
+                else t += ' | Hecho: —';
+                t += '\n';
+            }
+            t += '\n';
+        }
+        return t.trim();
+    }
+
+    /* =========================================================
+       RENDER
+       ========================================================= */
+    function render() {
+        const app = document.getElementById('app');
+        switch (state.screen) {
+            case 'load':    renderLoad(app);    break;
+            case 'tracker': renderTracker(app); break;
+            case 'view':    renderView(app);    break;
+            case 'history': renderHistory(app); break;
+        }
+    }
+
+    // ---------- LOAD SCREEN ----------
+    function renderLoad(app) {
+        const hasHist = history.length > 0;
+        app.innerHTML = `
+        <div class="header">
+            <h1>\u{1F4AA} Gym Tracker</h1>
+            <div class="sub">Registro semanal de entrenamiento</div>
+        </div>
+        <div class="load-screen">
+            <div class="info">
+                Pegá tu rutina semanal completa.<br>Formato esperado:<br><br>
+                <code>### **LUNES</code><br>
+                <code>1. **Ejercicio:** series x reps | Peso: X kg</code>
+            </div>
+            <textarea id="inp" placeholder="Pegá tu rutina aquí..."></textarea>
+            <div id="err" class="error"></div>
+            <button class="btn btn-primary btn-full" onclick="handleLoad()">Cargar Semana</button>
+            ${hasHist ? '<button class="btn btn-outline btn-full" onclick="showHistory()">Semanas anteriores (' + history.length + ')</button>' : ''}
+        </div>`;
+    }
+
+    // ---------- TRACKER SCREEN ----------
+    function renderTracker(app) {
+        const day = state.days[state.selectedDay];
+
+        const tabs = state.days.map((d, i) => {
+            const all  = d.exercises.every(e => e.done && e.done.trim());
+            const any  = d.exercises.some(e => e.done && e.done.trim());
+            let ck = '';
+            if (all) ck = '<span class="ck">\u2705</span>';
+            else if (any) ck = '<span class="ck">\u{1F7E1}</span>';
+            return '<button class="day-tab' + (i === state.selectedDay ? ' active' : '') +
+                   '" onclick="selDay(' + i + ')">' + d.name + ck + '</button>';
+        }).join('');
+
+        const cards = day.exercises.map((e, idx) => `
+            <div class="exercise-card">
+                <span class="ord">${e.order}</span>
+                <span class="nm">${esc(e.name)}</span>
+                <div class="det">
+                    \u{1F4CB} ${esc(e.expected)}<br>
+                    \u{1F3CB}\uFE0F ${esc(e.weight)}
+                </div>
+                <div class="reps-row">
+                    <span class="reps-lbl">Hecho:</span>
+                    <input type="text" value="${esc(e.done)}"
+                           placeholder="ej: 8, 8, 7, 6"
+                           inputmode="text"
+                           data-d="${state.selectedDay}" data-e="${idx}"
+                           oninput="updReps(this)">
+                </div>
+            </div>`).join('');
+
+        app.innerHTML = `
+        <div class="header"><h1>\u{1F4AA} Gym Tracker</h1></div>
+        <div class="day-tabs">${tabs}</div>
+        <div class="exercise-list">${cards}</div>
+        <div class="bottom-bar">
+            <button class="btn btn-primary" onclick="showView()">\u{1F4CA} Ver Semana</button>
+            <button class="btn btn-copy"    onclick="copyWeek()">\u{1F4CB} Copiar</button>
+            <button class="btn btn-danger"  onclick="newWeek()">\u{1F504} Nueva</button>
+        </div>`;
+    }
+
+    // ---------- WEEK VIEW SCREEN ----------
+    function renderView(app) {
+        const txt = genText();
+        app.innerHTML = `
+        <div class="header"><h1>\u{1F4CA} Resumen Semanal</h1></div>
+        <div class="week-view">
+            <pre>${esc(txt)}</pre>
+            <div class="acts">
+                <button class="btn btn-copy" onclick="copyWeek()">\u{1F4CB} Copiar Todo</button>
+                <button class="btn btn-outline" onclick="backTracker()">\u2190 Volver</button>
+            </div>
+        </div>`;
+    }
+
+    // ---------- HISTORY SCREEN ----------
+    function renderHistory(app) {
+        const items = history.map((h, i) => `
+            <div class="history-item">
+                <div>
+                    <div class="hi-info">${esc(h.label)}</div>
+                    <div class="hi-date">${h.savedAt || ''}</div>
+                </div>
+                <div class="hi-actions">
+                    <button class="hi-btn hi-btn-load" onclick="loadWeek(${i})">Cargar</button>
+                    <button class="hi-btn hi-btn-del"  onclick="delWeek(${i})">Borrar</button>
+                </div>
+            </div>`).join('');
+
+        app.innerHTML = `
+        <div class="header"><h1>\u{1F4C5} Semanas Guardadas</h1></div>
+        <div class="history-screen">
+            <div class="history-list">${items || '<div style="color:var(--text-sec);text-align:center;margin-top:40px">No hay semanas guardadas</div>'}</div>
+            <button class="btn btn-outline btn-full" onclick="backLoad()">\u2190 Volver</button>
+        </div>`;
+    }
+
+    /* =========================================================
+       HANDLERS
+       ========================================================= */
+    function handleLoad() {
+        const inp = document.getElementById('inp').value;
+        const err = document.getElementById('err');
+
+        if (!inp.trim()) { err.textContent = 'Pegá tu rutina primero.'; return; }
+
+        const days = parseRoutine(inp);
+        if (!days.length) { err.textContent = 'No se encontraron días. Verificá el formato (### **DÍA).'; return; }
+
+        const total = days.reduce((s, d) => s + d.exercises.length, 0);
+        if (!total) { err.textContent = 'No se encontraron ejercicios. Verificá el formato.'; return; }
+
+        state.days = days;
+        state.selectedDay = 0;
+        state.screen = 'tracker';
+        save();
+        render();
+        toast(days.length + ' días, ' + total + ' ejercicios cargados');
+    }
+
+    function selDay(i) {
+        state.selectedDay = i;
+        save();
+        render();
+        // Scroll tabs to show active
+        setTimeout(() => {
+            const active = document.querySelector('.day-tab.active');
+            if (active) active.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+        }, 50);
+    }
+
+    let saveTimer = null;
+    function updReps(el) {
+        const di = parseInt(el.dataset.d);
+        const ei = parseInt(el.dataset.e);
+        state.days[di].exercises[ei].done = el.value;
+        // Debounce save
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => save(), 300);
+    }
+
+    function showView() { state.screen = 'view'; render(); }
+
+    function backTracker() { state.screen = 'tracker'; render(); }
+
+    function backLoad() { state.screen = 'load'; render(); }
+
+    function showHistory() { state.screen = 'history'; render(); }
+
+    async function copyWeek() {
+        const txt = genText();
+        try {
+            await navigator.clipboard.writeText(txt);
+            toast('Copiado al portapapeles \u2713');
+        } catch(e) {
+            // Fallback
+            const ta = document.createElement('textarea');
+            ta.value = txt; ta.style.cssText = 'position:fixed;opacity:0';
+            document.body.appendChild(ta); ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            toast('Copiado al portapapeles \u2713');
+        }
+    }
+
+    function newWeek() {
+        if (!confirm('\u00bfGuardar la semana actual en el historial antes de empezar una nueva?')) {
+            if (confirm('\u00bfBorrar sin guardar? Se perder\u00e1 todo.')) {
+                state = { screen: 'load', days: [], selectedDay: 0 };
+                localStorage.removeItem(KEY);
+                render();
+            }
+            return;
+        }
+        // Save to history
+        const label = state.days.map(d => d.name).join(', ');
+        const now = new Date();
+        const savedAt = now.toLocaleDateString('es-AR') + ' ' + now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+        history.push({ id: Date.now(), label, days: JSON.parse(JSON.stringify(state.days)), savedAt });
+        saveHistory();
+
+        state = { screen: 'load', days: [], selectedDay: 0 };
+        localStorage.removeItem(KEY);
+        render();
+        toast('Semana guardada en historial');
+    }
+
+    function loadWeek(idx) {
+        const h = history[idx];
+        if (!h) return;
+        state.days = JSON.parse(JSON.stringify(h.days));
+        state.selectedDay = 0;
+        state.screen = 'tracker';
+        save();
+        render();
+        toast('Semana cargada');
+    }
+
+    function delWeek(idx) {
+        if (!confirm('\u00bfBorrar esta semana del historial?')) return;
+        history.splice(idx, 1);
+        saveHistory();
+        render();
+    }
+
+    /* =========================================================
+       UTILS
+       ========================================================= */
+    function esc(t) {
+        const d = document.createElement('div');
+        d.textContent = t;
+        return d.innerHTML;
+    }
+
+    function toast(msg) {
+        const el = document.getElementById('toast');
+        el.textContent = msg;
+        el.classList.add('show');
+        setTimeout(() => el.classList.remove('show'), 2200);
+    }
+
+    // Scroll input into view when keyboard opens
+    document.addEventListener('focusin', (e) => {
+        if (e.target.tagName === 'INPUT') {
+            setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
+        }
+    });
+
+    /* =========================================================
+       INIT
+       ========================================================= */
+    loadHistory();
+    load();
+    render();
+    </script>
+</body>
+</html>

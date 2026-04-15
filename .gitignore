@@ -1,0 +1,23 @@
+# Gradle
+.gradle/
+build/
+local.properties
+
+# Android Studio
+*.iml
+.idea/
+*.ipr
+*.iws
+captures/
+
+# APK / AAB
+*.apk
+*.aab
+
+# Keystore
+*.jks
+*.keystore
+
+# OS
+.DS_Store
+Thumbs.db
