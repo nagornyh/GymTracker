@@ -194,6 +194,19 @@
         }
         .hi-btn-load { background: var(--primary); color: #fff; }
         .hi-btn-del  { background: var(--danger); color: #fff; }
+
+        /* ===== EMAIL ROW ===== */
+        .email-row {
+            display: flex; gap: 8px; align-items: center; flex-shrink: 0;
+        }
+        .email-input {
+            flex: 1; background: var(--input-bg); color: var(--text);
+            border: 1px solid var(--border); border-radius: 8px;
+            padding: 10px 14px; font-size: 14px;
+        }
+        .email-input:focus { outline: none; border-color: var(--primary); }
+        .email-input::placeholder { color: #555; }
+        .btn-email { background: #FF5722; color: #fff; white-space: nowrap; flex-shrink: 0; padding: 10px 16px; }
     </style>
 </head>
 <body>
@@ -206,12 +219,16 @@
        ========================================================= */
     const KEY = 'gymtracker_data';
     const HIST_KEY = 'gymtracker_history';
+    const EMAIL_KEY = 'gymtracker_email';
 
-    let state = { screen: 'load', days: [], selectedDay: 0 };
-    let history = []; // array of { id, label, days, savedAt }
+    let state = { screen: 'load', days: [], selectedDay: 0, loadedAt: null };
+    let history = []; // array of { id, label, days, savedAt, loadedAt }
+    let emailTo = '';
 
     function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
     function saveHistory() { localStorage.setItem(HIST_KEY, JSON.stringify(history)); }
+    function saveEmail() { localStorage.setItem(EMAIL_KEY, emailTo); }
+    function loadEmail() { emailTo = localStorage.getItem(EMAIL_KEY) || ''; }
 
     function load() {
         try {
@@ -377,13 +394,24 @@
     // ---------- WEEK VIEW SCREEN ----------
     function renderView(app) {
         const txt = genText();
+        const range = getDateRange();
         app.innerHTML = `
-        <div class="header"><h1>\u{1F4CA} Resumen Semanal</h1></div>
+        <div class="header">
+            <h1>\u{1F4CA} Resumen Semanal</h1>
+            <div class="sub">${range.from} &mdash; ${range.to}</div>
+        </div>
         <div class="week-view">
             <pre>${esc(txt)}</pre>
+            <div class="email-row">
+                <input type="email" id="email-inp" class="email-input"
+                       value="${esc(emailTo)}"
+                       placeholder="destinatario@gmail.com"
+                       oninput="updEmail(this)">
+                <button class="btn btn-email" onclick="sendEmail()">📧 Enviar</button>
+            </div>
             <div class="acts">
-                <button class="btn btn-copy" onclick="copyWeek()">\u{1F4CB} Copiar Todo</button>
-                <button class="btn btn-outline" onclick="backTracker()">\u2190 Volver</button>
+                <button class="btn btn-copy" onclick="copyWeek()">📋 Copiar Todo</button>
+                <button class="btn btn-outline" onclick="backTracker()">← Volver</button>
             </div>
         </div>`;
     }
@@ -428,6 +456,7 @@
         state.days = days;
         state.selectedDay = 0;
         state.screen = 'tracker';
+        state.loadedAt = new Date().toISOString();
         save();
         render();
         toast(days.length + ' días, ' + total + ' ejercicios cargados');
@@ -478,6 +507,61 @@
         }
     }
 
+    /* =========================================================
+       DATE RANGE & EMAIL
+       ========================================================= */
+    const DAY_NUM = { LUNES:1, MARTES:2, MIERCOLES:3, 'MIÉRCOLES':3, JUEVES:4, VIERNES:5, SABADO:6, 'SÁBADO':6, DOMINGO:0 };
+
+    function getDayDate(dayName, monday) {
+        const dow = DAY_NUM[dayName.toUpperCase()];
+        if (dow === undefined) return null;
+        const off = dow === 0 ? 6 : dow - 1;
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + off);
+        return d;
+    }
+
+    function getDateRange() {
+        const loadedAt = state.loadedAt ? new Date(state.loadedAt) : new Date();
+
+        // Calcular el lunes de la semana en que se cargó la rutina
+        const loadDow   = loadedAt.getDay();
+        const mondayOff = loadDow === 0 ? -6 : 1 - loadDow;
+        const monday    = new Date(loadedAt);
+        monday.setDate(loadedAt.getDate() + mondayOff);
+
+        const days = state.days && state.days.length ? state.days : [];
+        const fmt  = d => d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
+
+        const firstDate = days.length ? getDayDate(days[0].name, monday) : null;
+        const lastDate  = days.length ? getDayDate(days[days.length - 1].name, monday) : null;
+
+        return {
+            from: firstDate ? fmt(firstDate) : fmt(monday),
+            to:   lastDate  ? fmt(lastDate)  : fmt(new Date())
+        };
+    }
+
+    function updEmail(el) {
+        emailTo = el.value;
+        saveEmail();
+    }
+
+    function sendEmail() {
+        const email = emailTo.trim();
+        if (!email) { toast('Escribí un email destino primero'); return; }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('Email inválido'); return; }
+
+        const range   = getDateRange();
+        const subject = 'Resultados GYM: ' + range.from + ' - ' + range.to;
+        const body    = genText();
+
+        const url = 'mailto:' + encodeURIComponent(email)
+                  + '?subject=' + encodeURIComponent(subject)
+                  + '&body='    + encodeURIComponent(body);
+        window.location.href = url;
+    }
+
     function newWeek() {
         if (!confirm('\u00bfGuardar la semana actual en el historial antes de empezar una nueva?')) {
             if (confirm('\u00bfBorrar sin guardar? Se perder\u00e1 todo.')) {
@@ -491,7 +575,7 @@
         const label = state.days.map(d => d.name).join(', ');
         const now = new Date();
         const savedAt = now.toLocaleDateString('es-AR') + ' ' + now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
-        history.push({ id: Date.now(), label, days: JSON.parse(JSON.stringify(state.days)), savedAt });
+        history.push({ id: Date.now(), label, days: JSON.parse(JSON.stringify(state.days)), savedAt, loadedAt: state.loadedAt });
         saveHistory();
 
         state = { screen: 'load', days: [], selectedDay: 0 };
@@ -506,6 +590,7 @@
         state.days = JSON.parse(JSON.stringify(h.days));
         state.selectedDay = 0;
         state.screen = 'tracker';
+        state.loadedAt = h.loadedAt || new Date().toISOString();
         save();
         render();
         toast('Semana cargada');
@@ -545,6 +630,7 @@
        INIT
        ========================================================= */
     loadHistory();
+    loadEmail();
     load();
     render();
     </script>

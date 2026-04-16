@@ -61,9 +61,20 @@ Tocá **"Cargar Semana"**.
 - Tocá **"Copiar"** para copiar todo al portapapeles
 - Pegalo donde quieras (WhatsApp, notas, etc.)
 
-### 4. Nueva semana
+### 4. Enviar por email (Gmail u otra app de correo)
+- En la vista **"Resumen Semanal"**, escribí el correo destino
+- Tocá **"Enviar"**
+- Se abre la app de correo con destinatario, asunto y cuerpo ya armados
+- Asunto automático: **Resultados GYM: DD/MM - DD/MM**
+    - El rango se calcula desde el primer día de la rutina cargada hasta el último día de esa misma rutina (por ejemplo, LUNES a VIERNES)
+
+### 5. Nueva semana
 - Tocá **"Nueva"** → te pregunta si querés guardar en historial antes de borrar
 - Las semanas guardadas se pueden ver desde la pantalla de carga
+
+### 6. Nota de compatibilidad (botón Enviar)
+- En el navegador integrado de VS Code, el `mailto:` puede no abrir nada por sandbox
+- En celular (Chrome / APK instalada), sí abre Gmail o el cliente de correo configurado
 
 ---
 
