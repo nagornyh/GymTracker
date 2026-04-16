@@ -1,12 +1,13 @@
 package com.gymtracker
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.view.Window
-import android.view.WindowManager
 import android.graphics.Color
 import androidx.appcompat.app.AppCompatActivity
 
@@ -28,7 +29,21 @@ class MainActivity : AppCompatActivity() {
             settings.allowFileAccess = true
             settings.setSupportZoom(false)
 
-            webViewClient = WebViewClient()
+            webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(
+                    view: WebView,
+                    request: WebResourceRequest
+                ): Boolean {
+                    val uri = request.url
+                    return if (uri.scheme == "mailto") {
+                        val intent = Intent(Intent.ACTION_SENDTO, uri)
+                        startActivity(Intent.createChooser(intent, "Enviar email"))
+                        true
+                    } else {
+                        false
+                    }
+                }
+            }
             webChromeClient = WebChromeClient()
 
             loadUrl("file:///android_asset/index.html")
