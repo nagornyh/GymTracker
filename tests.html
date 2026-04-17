@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gym Tracker — Tests</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #121212; color: #fff; font-family: monospace; font-size: 14px; padding: 24px; }
+        h1 { color: #4CAF50; margin-bottom: 4px; font-size: 20px; }
+        .subtitle { color: #888; margin-bottom: 24px; font-size: 13px; }
+        .suite { margin-bottom: 28px; }
+        .suite-name { font-size: 16px; font-weight: bold; color: #90CAF9; margin-bottom: 10px; border-bottom: 1px solid #333; padding-bottom: 6px; }
+        .test { padding: 8px 12px; margin-bottom: 6px; border-radius: 6px; display: flex; align-items: flex-start; gap: 10px; }
+        .test.pass { background: rgba(76,175,80,0.12); border-left: 3px solid #4CAF50; }
+        .test.fail { background: rgba(244,67,54,0.12); border-left: 3px solid #f44336; }
+        .icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+        .test-name { font-weight: bold; }
+        .test-detail { color: #aaa; font-size: 12px; margin-top: 4px; }
+        .test-detail.err { color: #ef9a9a; }
+        .summary { margin-top: 24px; padding: 16px; border-radius: 8px; font-size: 16px; font-weight: bold; }
+        .summary.all-pass { background: rgba(76,175,80,0.18); color: #4CAF50; }
+        .summary.has-fail { background: rgba(244,67,54,0.18); color: #f44336; }
+    </style>
+</head>
+<body>
+    <h1>💪 Gym Tracker — Test Suite</h1>
+    <div class="subtitle">Tests de lógica pura (parseRoutine, genText, validateRepValue, getDayDate, getDateRange)</div>
+    <div id="results"></div>
+    <div id="summary"></div>
+
+<script>
+/* =========================================================
+   FUNCIONES COPIADAS DE index.html PARA TEST
+   ========================================================= */
+
+function parseRoutine(text) {
+    const lines = text.split('\n');
+    const days = [];
+    let cur = null;
+    for (let raw of lines) {
+        const line = raw.trim();
+        if (!line || /^-{2,}$/.test(line)) continue;
+        const dayM = line.match(/^#{0,3}\s*\*{0,2}\s*([A-ZÁÉÍÓÚÑÜ]+)\s*\*{0,2}\s*$/i);
+        if (dayM) { cur = { name: dayM[1].toUpperCase(), exercises: [] }; days.push(cur); continue; }
+        if (!cur) continue;
+        let clean = line.replace(/\*\*/g, '');
+        if (!/^\d+\./.test(clean)) continue;
+        const pipeIdx = clean.indexOf('|');
+        if (pipeIdx === -1) continue;
+        const left  = clean.substring(0, pipeIdx).trim();
+        const right = clean.substring(pipeIdx + 1).trim();
+        const ordM  = left.match(/^(\d+)\.\s*/);
+        if (!ordM) continue;
+        const order = parseInt(ordM[1]);
+        const rest  = left.substring(ordM[0].length);
+        const colM  = rest.match(/^(.+?):\s*(\d.+)$/);
+        if (!colM) continue;
+        const name     = colM[1].trim();
+        const expected = colM[2].trim();
+        const wM = right.match(/^Peso:\s*([^|]+)/i);
+        const weight = wM ? wM[1].trim() : right.split('|')[0].trim();
+        cur.exercises.push({ order, name, expected, weight, done: '' });
+    }
+    return days;
+}
+
+function genText(days) {
+    let t = '';
+    for (let i = 0; i < days.length; i++) {
+        const d = days[i];
+        if (i > 0) t += '\n---\n\n';
+        t += '### **' + d.name + '**\n\n';
+        for (const e of d.exercises) {
+            t += e.order + '. **' + e.name + ':** ' + e.expected + ' | Peso: ' + e.weight;
+            if (e.done && e.done.trim()) t += ' | Hecho: ' + e.done.trim();
+            else t += ' | Hecho: —';
+            t += '\n';
+        }
+        t += '\n';
+    }
+    return t.trim();
+}
+
+function validateRepValue(val) {
+    if (val === '' || val === null || val === undefined) return true;
+    const n = parseInt(val, 10);
+    return /^\d+$/.test(val.trim()) && n >= 1;
+}
+
+const DAY_NUM = { LUNES:1, MARTES:2, MIERCOLES:3, 'MIÉRCOLES':3, JUEVES:4, VIERNES:5, SABADO:6, 'SÁBADO':6, DOMINGO:0 };
+
+function getDayDate(dayName, monday) {
+    const dow = DAY_NUM[dayName.toUpperCase()];
+    if (dow === undefined) return null;
+    const off = dow === 0 ? 6 : dow - 1;
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + off);
+    return d;
+}
+
+function getDateRange(days, loadedAt) {
+    const loadDate = loadedAt ? new Date(loadedAt) : new Date();
+    const loadDow   = loadDate.getDay();
+    const mondayOff = loadDow === 0 ? -6 : 1 - loadDow;
+    const monday    = new Date(loadDate);
+    monday.setDate(loadDate.getDate() + mondayOff);
+    const fmt = d => String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0');
+    const firstDate = days.length ? getDayDate(days[0].name, monday) : null;
+    const lastDate  = days.length ? getDayDate(days[days.length - 1].name, monday) : null;
+    return {
+        from: firstDate ? fmt(firstDate) : fmt(monday),
+        to:   lastDate  ? fmt(lastDate)  : fmt(new Date())
+    };
+}
+
+/* =========================================================
+   MINI TEST RUNNER
+   ========================================================= */
+const results = [];
+let currentSuite = null;
+
+function suite(name, fn) {
+    currentSuite = name;
+    fn();
+}
+
+function test(name, fn) {
+    try {
+        fn();
+        results.push({ suite: currentSuite, name, pass: true });
+    } catch(e) {
+        results.push({ suite: currentSuite, name, pass: false, error: e.message });
+    }
+}
+
+function assert(condition, msg) {
+    if (!condition) throw new Error(msg || 'Assertion failed');
+}
+
+function assertEqual(a, b, msg) {
+    if (a !== b) throw new Error((msg || '') + ` → esperado: "${b}", recibido: "${a}"`);
+}
+
+function assertIncludes(str, sub, msg) {
+    if (!str.includes(sub)) throw new Error((msg || '') + ` → "${str}" no contiene "${sub}"`);
+}
+
+/* =========================================================
+   DATOS DE TEST
+   ========================================================= */
+const SAMPLE_ROUTINE = `### **LUNES
+
+1. **Press de Banca:** 3 series x 8-10 reps | Peso: 80 kg
+2. **Press Militar:** 3 series x 10-12 reps | Peso: Mancuernas de 20 kg
+
+---
+
+### **MARTES
+
+1. **Jalón al Pecho:** 3 series x 8-12 reps | Peso: 6 ladrillos
+2. **Remo Sentado:** 3 series x 10-12 reps | Peso: 5 ladrillos`;
+
+/* =========================================================
+   SUITES
+   ========================================================= */
+
+suite('parseRoutine — casos válidos', () => {
+
+    test('Detecta 2 días', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE);
+        assertEqual(days.length, 2, 'cantidad de días');
+    });
+
+    test('Nombres de días en mayúsculas', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE);
+        assertEqual(days[0].name, 'LUNES');
+        assertEqual(days[1].name, 'MARTES');
+    });
+
+    test('Cantidad de ejercicios por día', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE);
+        assertEqual(days[0].exercises.length, 2, 'LUNES');
+        assertEqual(days[1].exercises.length, 2, 'MARTES');
+    });
+
+    test('Parseo correcto de nombre, expected, weight', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE);
+        const e = days[0].exercises[0];
+        assertEqual(e.name, 'Press de Banca');
+        assertEqual(e.expected, '3 series x 8-10 reps');
+        assertEqual(e.weight, '80 kg');
+    });
+
+    test('Orden numérico correcto', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE);
+        assertEqual(days[0].exercises[0].order, 1);
+        assertEqual(days[0].exercises[1].order, 2);
+    });
+
+    test('done inicia vacío', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE);
+        assertEqual(days[0].exercises[0].done, '');
+    });
+
+    test('Acepta formato sin asteriscos en día', () => {
+        const days = parseRoutine('### LUNES\n\n1. **Ejercicio:** 3 series x 8 reps | Peso: 10 kg');
+        assertEqual(days.length, 1);
+        assertEqual(days[0].name, 'LUNES');
+    });
+
+    test('Ignora líneas separadoras (---)', () => {
+        const days = parseRoutine('### **LUNES\n\n1. **Ej:** 3 series x 5 reps | Peso: 10 kg\n\n---\n\n### **MARTES\n\n1. **Ej2:** 3 series x 5 reps | Peso: 5 kg');
+        assertEqual(days.length, 2);
+    });
+});
+
+suite('parseRoutine — casos borde y error', () => {
+
+    test('Texto vacío devuelve array vacío', () => {
+        const days = parseRoutine('');
+        assertEqual(days.length, 0);
+    });
+
+    test('Solo separadores devuelve array vacío', () => {
+        const days = parseRoutine('---\n---\n\n');
+        assertEqual(days.length, 0);
+    });
+
+    test('Día sin ejercicios devuelve día con array vacío', () => {
+        const days = parseRoutine('### **LUNES');
+        assertEqual(days.length, 1);
+        assertEqual(days[0].exercises.length, 0);
+    });
+
+    test('Ejercicio sin pipe (|) es ignorado', () => {
+        const days = parseRoutine('### **LUNES\n\n1. **Ej:** 3 series x 5 reps sin peso');
+        assertEqual(days[0].exercises.length, 0);
+    });
+
+    test('Línea sin número de ejercicio es ignorada', () => {
+        const days = parseRoutine('### **LUNES\n\nEjercicio sin número | Peso: 10 kg');
+        assertEqual(days[0].exercises.length, 0);
+    });
+
+    test('Peso de tipo "Mancuernas de X kg" se parsea completo', () => {
+        const days = parseRoutine('### **LUNES\n\n1. **Curl:** 3 series x 10 reps | Peso: Mancuernas de 12,5 kg');
+        assertEqual(days[0].exercises[0].weight, 'Mancuernas de 12,5 kg');
+    });
+
+    test('Peso de tipo "X ladrillos" se parsea completo', () => {
+        const days = parseRoutine('### **LUNES\n\n1. **Jalón:** 3 series x 10 reps | Peso: 6 ladrillos');
+        assertEqual(days[0].exercises[0].weight, '6 ladrillos');
+    });
+});
+
+suite('genText — generación de texto de salida', () => {
+
+    test('Genera encabezado de día', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE);
+        const txt = genText(days);
+        assertIncludes(txt, '### **LUNES**');
+    });
+
+    test('Incluye nombre del ejercicio en negrita', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE);
+        const txt = genText(days);
+        assertIncludes(txt, '**Press de Banca:**');
+    });
+
+    test('Muestra "Hecho: —" cuando no hay reps cargadas', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE);
+        const txt = genText(days);
+        assertIncludes(txt, '| Hecho: —');
+    });
+
+    test('Muestra reps reales cuando están cargadas', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE);
+        days[0].exercises[0].done = '8,8,7';
+        const txt = genText(days);
+        assertIncludes(txt, '| Hecho: 8,8,7');
+    });
+
+    test('Incluye separador --- entre días', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE);
+        const txt = genText(days);
+        assertIncludes(txt, '\n---\n');
+    });
+
+    test('Formato completo de línea de ejercicio', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE);
+        const txt = genText(days);
+        assertIncludes(txt, '1. **Press de Banca:** 3 series x 8-10 reps | Peso: 80 kg | Hecho: —');
+    });
+
+    test('Round-trip: parsear y generar mantiene nombre del ejercicio', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE);
+        const txt = genText(days);
+        const days2 = parseRoutine(txt);
+        assertEqual(days2[0].exercises[0].name, days[0].exercises[0].name);
+    });
+
+    test('Round-trip: peso no incluye "| Hecho:" al re-parsear', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE);
+        days[0].exercises[0].done = '8,8,7';
+        const txt = genText(days);
+        const days2 = parseRoutine(txt);
+        assertEqual(days2[0].exercises[0].weight, '80 kg', 'peso no debe incluir | Hecho:');
+    });
+});
+
+suite('validateRepValue — validación de casilleros', () => {
+
+    test('Vacío es válido', () => {
+        assert(validateRepValue('') === true);
+    });
+
+    test('null es válido', () => {
+        assert(validateRepValue(null) === true);
+    });
+
+    test('Número positivo entero es válido', () => {
+        assert(validateRepValue('8') === true);
+        assert(validateRepValue('12') === true);
+        assert(validateRepValue('1') === true);
+    });
+
+    test('Cero (0) es inválido', () => {
+        assert(validateRepValue('0') === false, '0 debe ser inválido');
+    });
+
+    test('Número negativo es inválido', () => {
+        assert(validateRepValue('-5') === false);
+    });
+
+    test('Texto libre es inválido', () => {
+        assert(validateRepValue('abc') === false);
+        assert(validateRepValue('ocho') === false);
+    });
+
+    test('Texto con letras mezcladas es inválido', () => {
+        assert(validateRepValue('8a') === false);
+        assert(validateRepValue('1,2') === false); // coma no es válida en un solo casillero
+    });
+
+    test('Número con espacios al inicio/fin es válido', () => {
+        assert(validateRepValue('  8  ') === true);
+    });
+
+    test('Número decimal es inválido', () => {
+        assert(validateRepValue('8.5') === false);
+        assert(validateRepValue('8,5') === false);
+    });
+});
+
+suite('getDayDate — cálculo de fecha por nombre de día', () => {
+
+    // Lunes de referencia: 14/04/2026
+    const monday = new Date(2026, 3, 14); // Mes 3 = Abril (0-indexed)
+
+    test('LUNES = lunes 14/04/2026', () => {
+        const d = getDayDate('LUNES', monday);
+        assertEqual(d.getDate(), 14);
+        assertEqual(d.getMonth(), 3);
+    });
+
+    test('MARTES = martes 15/04/2026', () => {
+        const d = getDayDate('MARTES', monday);
+        assertEqual(d.getDate(), 15);
+    });
+
+    test('MIERCOLES = miércoles 16/04/2026', () => {
+        const d = getDayDate('MIERCOLES', monday);
+        assertEqual(d.getDate(), 16);
+    });
+
+    test('JUEVES = jueves 17/04/2026', () => {
+        const d = getDayDate('JUEVES', monday);
+        assertEqual(d.getDate(), 17);
+    });
+
+    test('VIERNES = viernes 18/04/2026', () => {
+        const d = getDayDate('VIERNES', monday);
+        assertEqual(d.getDate(), 18);
+    });
+
+    test('S\u00c1BADO = s\u00e1bado 19/04/2026', () => {
+        const d = getDayDate('S\u00c1BADO', monday);
+        assertEqual(d.getDate(), 19);
+    });
+
+    test('DOMINGO = domingo 20/04/2026', () => {
+        const d = getDayDate('DOMINGO', monday);
+        assertEqual(d.getDate(), 20);
+    });
+
+    test('Día inexistente devuelve null', () => {
+        const d = getDayDate('MIIIERCOLES', monday);
+        assert(d === null, 'debe ser null para día desconocido');
+    });
+});
+
+suite('getDateRange — rango de la semana', () => {
+    // Apr 13, 2026 = lunes real (getDay()===1)
+    const MONDAY_LOADED = new Date(2026, 3, 13).toISOString();
+
+    test('Rutina LUN-MAR cargada el lunes → from=13/04, to=14/04', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE); // LUNES y MARTES
+        const range = getDateRange(days, MONDAY_LOADED);
+        assertEqual(range.from, '13/04', 'from debe ser LUNES 13/04');
+        assertEqual(range.to, '14/04', 'to debe ser MARTES 14/04');
+    });
+
+    test('Rango consistente: from <= to numéricamente', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE);
+        const range = getDateRange(days, MONDAY_LOADED);
+        const [fd, fm] = range.from.split('/').map(Number);
+        const [td, tm] = range.to.split('/').map(Number);
+        const fromNum = fm * 100 + fd;
+        const toNum   = tm * 100 + td;
+        assert(fromNum <= toNum, 'from debe ser anterior o igual a to');
+    });
+
+    test('Array vacío no lanza excepción', () => {
+        const range = getDateRange([], MONDAY_LOADED);
+        assert(range.from && range.to, 'debe retornar fechas aunque days esté vacío');
+    });
+});
+suite('Rutinas con N d\u00edas \u2014 cobertura de casos', () => {
+
+    test('Rutina de 1 d\u00eda funciona', () => {
+        const days = parseRoutine('### **LUNES\n\n1. **Ej:** 3 series x 8 reps | Peso: 10 kg');
+        assertEqual(days.length, 1);
+        assertEqual(days[0].exercises.length, 1);
+    });
+    test('Rutina de 2 días funciona', () => {
+        const txt = '### **LUNES\n\n1. **EjA:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **MARTES\n\n1. **EjB:** 3 series x 8 reps | Peso: 10 kg';
+        const days = parseRoutine(txt);
+        assertEqual(days.length, 2);
+        assertEqual(days[0].name, 'LUNES');
+        assertEqual(days[1].name, 'MARTES');
+    });
+    test('Rutina de 3 d\u00edas (LUN, MIE, VIE) funciona', () => {
+        const txt = '### **LUNES\n\n1. **EjA:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **MIERCOLES\n\n1. **EjB:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjC:** 3 series x 8 reps | Peso: 10 kg';
+        const days = parseRoutine(txt);
+        assertEqual(days.length, 3);
+        assertEqual(days[0].name, 'LUNES');
+        assertEqual(days[1].name, 'MIERCOLES');
+        assertEqual(days[2].name, 'VIERNES');
+    });
+
+    test('Rutina de 4 d\u00edas (LUN, MAR, JUE, VIE) funciona', () => {
+        const txt = '### **LUNES\n\n1. **EjA:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **MARTES\n\n1. **EjB:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **JUEVES\n\n1. **EjC:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjD:** 3 series x 8 reps | Peso: 10 kg';
+        const days = parseRoutine(txt);
+        assertEqual(days.length, 4);
+        assertEqual(days[2].name, 'JUEVES');
+        assertEqual(days[3].name, 'VIERNES');
+    });
+
+    test('Rutina de 5 d\u00edas (LUN-VIE) funciona', () => {
+        const txt = '### **LUNES\n\n1. **EjA:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **MARTES\n\n1. **EjB:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **MIERCOLES\n\n1. **EjC:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **JUEVES\n\n1. **EjD:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjE:** 3 series x 8 reps | Peso: 10 kg';
+        const days = parseRoutine(txt);
+        assertEqual(days.length, 5);
+        assertEqual(days[4].name, 'VIERNES');
+    });
+
+    test('Rutina de 6 d\u00edas (LUN-SAB) funciona', () => {
+        const txt = '### **LUNES\n\n1. **EjA:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **MARTES\n\n1. **EjB:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **MIERCOLES\n\n1. **EjC:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **JUEVES\n\n1. **EjD:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjE:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **SABADO\n\n1. **EjF:** 3 series x 8 reps | Peso: 10 kg';
+        const days = parseRoutine(txt);
+        assertEqual(days.length, 6);
+        assertEqual(days[5].name, 'SABADO');
+    });
+    test('Rutina de 7 días (LUN-DOM) funciona', () => {
+        const txt = '### **LUNES\n\n1. **EjA:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **MARTES\n\n1. **EjB:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **MIERCOLES\n\n1. **EjC:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **JUEVES\n\n1. **EjD:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjE:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **SABADO\n\n1. **EjF:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **DOMINGO\n\n1. **EjG:** 3 x 8 | Peso: 10 kg';
+        const days = parseRoutine(txt);
+        assertEqual(days.length, 7, '7 días parseados');
+        assertEqual(days[0].name, 'LUNES');
+        assertEqual(days[6].name, 'DOMINGO');
+    });
+    test('Round-trip 4 d\u00edas preserva estructura completa', () => {
+        const txt = '### **LUNES\n\n1. **EjA:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **MARTES\n\n1. **EjB:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **JUEVES\n\n1. **EjC:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjD:** 3 series x 8 reps | Peso: 10 kg';
+        const days = parseRoutine(txt);
+        const out = genText(days);
+        const days2 = parseRoutine(out);
+        assertEqual(days2.length, 4, '4 d\u00edas en round-trip');
+        assertEqual(days2[0].name, 'LUNES');
+        assertEqual(days2[3].name, 'VIERNES');
+    });
+
+    test('getDateRange para 4 días (LUN,MAR,JUE,VIE) da rango correcto', () => {
+        // Apr 13 = lunes real
+        const txt = '### **LUNES\n\n1. **EjA:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **MARTES\n\n1. **EjB:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **JUEVES\n\n1. **EjC:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjD:** 3 series x 8 reps | Peso: 10 kg';
+        const days = parseRoutine(txt);
+        const loadedAt = new Date(2026, 3, 13).toISOString();
+        const range = getDateRange(days, loadedAt);
+        assertEqual(range.from, '13/04', 'from = LUNES 13/04');
+        assertEqual(range.to, '17/04', 'to = VIERNES 17/04');
+    });
+
+    test('getDateRange para 7 días (LUN-DOM) da rango completo', () => {
+        const txt = '### **LUNES\n\n1. **EjA:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **MARTES\n\n1. **EjB:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **MIERCOLES\n\n1. **EjC:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **JUEVES\n\n1. **EjD:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjE:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **SABADO\n\n1. **EjF:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **DOMINGO\n\n1. **EjG:** 3 x 8 | Peso: 10 kg';
+        const days = parseRoutine(txt);
+        const loadedAt = new Date(2026, 3, 13).toISOString();
+        const range = getDateRange(days, loadedAt);
+        assertEqual(range.from, '13/04', 'from = LUNES 13/04');
+        assertEqual(range.to, '19/04', 'to = DOMINGO 19/04');
+    });
+});
+
+suite('Rutinas que no empiezan en LUNES', () => {
+    // Referencia: cargado el lunes real 13/04/2026
+    // MARTES=14/04, MIERCOLES=15/04, JUEVES=16/04, VIERNES=17/04, SABADO=18/04, DOMINGO=19/04
+    const LOADED_MON = new Date(2026, 3, 13).toISOString();
+
+    test('Parse: rutina MARTES-JUEVES-VIERNES (3 días)', () => {
+        const txt = '### **MARTES\n\n1. **EjA:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **JUEVES\n\n1. **EjB:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjC:** 3 x 8 | Peso: 10 kg';
+        const days = parseRoutine(txt);
+        assertEqual(days.length, 3, '3 días');
+        assertEqual(days[0].name, 'MARTES');
+        assertEqual(days[2].name, 'VIERNES');
+    });
+
+    test('getDateRange: MARTES-VIERNES da 14/04-17/04', () => {
+        const txt = '### **MARTES\n\n1. **EjA:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **JUEVES\n\n1. **EjB:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjC:** 3 x 8 | Peso: 10 kg';
+        const days = parseRoutine(txt);
+        const range = getDateRange(days, LOADED_MON);
+        assertEqual(range.from, '14/04', 'from = MARTES 14/04');
+        assertEqual(range.to, '17/04', 'to = VIERNES 17/04');
+    });
+
+    test('Parse: rutina MIERCOLES-JUEVES-VIERNES-SABADO (4 días)', () => {
+        const txt = '### **MIERCOLES\n\n1. **EjA:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **JUEVES\n\n1. **EjB:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjC:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **SABADO\n\n1. **EjD:** 3 x 8 | Peso: 10 kg';
+        const days = parseRoutine(txt);
+        assertEqual(days.length, 4);
+        assertEqual(days[0].name, 'MIERCOLES');
+        assertEqual(days[3].name, 'SABADO');
+    });
+
+    test('getDateRange: MIERCOLES-SABADO da 15/04-18/04', () => {
+        const txt = '### **MIERCOLES\n\n1. **EjA:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **JUEVES\n\n1. **EjB:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjC:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **SABADO\n\n1. **EjD:** 3 x 8 | Peso: 10 kg';
+        const days = parseRoutine(txt);
+        const range = getDateRange(days, LOADED_MON);
+        assertEqual(range.from, '15/04', 'from = MIERCOLES 15/04');
+        assertEqual(range.to, '18/04', 'to = SABADO 18/04');
+    });
+
+    test('Parse: rutina JUEVES-VIERNES (2 días)', () => {
+        const txt = '### **JUEVES\n\n1. **EjA:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjB:** 3 x 8 | Peso: 10 kg';
+        const days = parseRoutine(txt);
+        assertEqual(days.length, 2);
+        assertEqual(days[0].name, 'JUEVES');
+    });
+
+    test('getDateRange: JUEVES-VIERNES da 16/04-17/04', () => {
+        const txt = '### **JUEVES\n\n1. **EjA:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjB:** 3 x 8 | Peso: 10 kg';
+        const days = parseRoutine(txt);
+        const range = getDateRange(days, LOADED_MON);
+        assertEqual(range.from, '16/04', 'from = JUEVES 16/04');
+        assertEqual(range.to, '17/04', 'to = VIERNES 17/04');
+    });
+
+    test('Parse: rutina de 1 día en VIERNES', () => {
+        const txt = '### **VIERNES\n\n1. **EjA:** 3 x 8 | Peso: 10 kg';
+        const days = parseRoutine(txt);
+        assertEqual(days.length, 1);
+        assertEqual(days[0].name, 'VIERNES');
+        const range = getDateRange(days, LOADED_MON);
+        assertEqual(range.from, '17/04', 'from = VIERNES 17/04');
+        assertEqual(range.to, '17/04', 'to = VIERNES 17/04');
+    });
+
+    test('Parse: rutina de 1 día en DOMINGO', () => {
+        const txt = '### **DOMINGO\n\n1. **EjA:** 3 x 8 | Peso: 10 kg';
+        const days = parseRoutine(txt);
+        assertEqual(days.length, 1);
+        assertEqual(days[0].name, 'DOMINGO');
+        const range = getDateRange(days, LOADED_MON);
+        assertEqual(range.from, '19/04', 'from = DOMINGO 19/04');
+        assertEqual(range.to, '19/04', 'to = DOMINGO 19/04');
+    });
+
+    test('Round-trip: rutina inicio MARTES se parsea igual tras genText', () => {
+        const txt = '### **MARTES\n\n1. **Press:** 3 series x 10 reps | Peso: 50 kg\n\n---\n\n### **JUEVES\n\n1. **Sentadilla:** 3 series x 8 reps | Peso: 80 kg';
+        const days = parseRoutine(txt);
+        const out = genText(days);
+        const days2 = parseRoutine(out);
+        assertEqual(days2.length, 2, '2 días tras round-trip');
+        assertEqual(days2[0].name, 'MARTES');
+        assertEqual(days2[0].exercises[0].weight, '50 kg');
+        assertEqual(days2[1].name, 'JUEVES');
+    });
+});
+/* =========================================================
+   RENDER RESULTADOS
+   ========================================================= */
+function renderResults() {
+    const container = document.getElementById('results');
+    const suiteMap = {};
+    for (const r of results) {
+        if (!suiteMap[r.suite]) suiteMap[r.suite] = [];
+        suiteMap[r.suite].push(r);
+    }
+
+    for (const [suiteName, tests] of Object.entries(suiteMap)) {
+        const passed = tests.filter(t => t.pass).length;
+        const el = document.createElement('div');
+        el.className = 'suite';
+        el.innerHTML = `<div class="suite-name">${suiteName} <span style="color:#888;font-size:13px">(${passed}/${tests.length})</span></div>`;
+        for (const t of tests) {
+            const row = document.createElement('div');
+            row.className = 'test ' + (t.pass ? 'pass' : 'fail');
+            row.innerHTML = `
+                <span class="icon">${t.pass ? '✅' : '❌'}</span>
+                <div>
+                    <div class="test-name">${t.name}</div>
+                    ${!t.pass ? `<div class="test-detail err">${t.error}</div>` : ''}
+                </div>`;
+            el.appendChild(row);
+        }
+        container.appendChild(el);
+    }
+
+    const total  = results.length;
+    const passed = results.filter(r => r.pass).length;
+    const failed = total - passed;
+    const sumEl  = document.getElementById('summary');
+    sumEl.className = 'summary ' + (failed === 0 ? 'all-pass' : 'has-fail');
+    sumEl.textContent = failed === 0
+        ? `✅ Todos los tests pasaron (${total}/${total})`
+        : `❌ ${failed} test(s) fallaron — ${passed}/${total} pasaron`;
+}
+
+renderResults();
+</script>
+</body>
+</html>

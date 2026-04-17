@@ -124,20 +124,32 @@
             margin-top: 8px; font-size: 13px; color: var(--text-sec); line-height: 1.4;
         }
         .exercise-card .reps-row {
-            margin-top: 10px; display: flex; align-items: center; gap: 8px;
+            margin-top: 10px;
         }
         .exercise-card .reps-lbl {
-            font-size: 13px; font-weight: 600; color: var(--primary); white-space: nowrap;
+            font-size: 13px; font-weight: 600; color: var(--primary); margin-bottom: 8px;
+            display: block;
         }
-        .exercise-card input {
-            flex: 1; background: var(--input-bg); color: var(--text);
-            border: 1px solid var(--border); border-radius: 6px;
-            padding: 8px 12px; font-size: 15px; font-family: monospace;
+        .exercise-card .reps-boxes {
+            display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
         }
-        .exercise-card input:focus { outline: none; border-color: var(--primary); }
-        .exercise-card input::placeholder {
-            color: #555; font-family: sans-serif; font-size: 13px;
+        .exercise-card .rep-box {
+            width: 54px; height: 48px; background: var(--input-bg); color: var(--text);
+            border: 1px solid var(--border); border-radius: 8px;
+            text-align: center; font-size: 18px; font-family: monospace;
+            font-weight: 600;
         }
+        .exercise-card .rep-box:focus { outline: none; border-color: var(--primary); }
+        .exercise-card .rep-box::placeholder { color: #555; font-size: 13px; }
+        .exercise-card .rep-box.invalid { border-color: var(--danger); background: rgba(244,67,54,0.08); }
+        .exercise-card .rep-add {
+            width: 48px; height: 48px; background: var(--card);
+            border: 2px dashed var(--border); border-radius: 8px;
+            color: var(--primary); font-size: 24px; font-weight: 700;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .exercise-card .rep-add:active { border-color: var(--primary); background: var(--input-bg); }
 
         /* ===== BOTTOM BAR ===== */
         .bottom-bar {
@@ -286,8 +298,8 @@
             const name     = colM[1].trim();
             const expected = colM[2].trim();
 
-            const wM = right.match(/^Peso:\s*(.+)$/i);
-            const weight = wM ? wM[1].trim() : right.trim();
+            const wM = right.match(/^Peso:\s*([^|]+)/i);
+            const weight = wM ? wM[1].trim() : right.split('|')[0].trim();
 
             cur.exercises.push({ order, name, expected, weight, done: '' });
         }
@@ -362,7 +374,18 @@
                    '" onclick="selDay(' + i + ')">' + d.name + ck + '</button>';
         }).join('');
 
-        const cards = day.exercises.map((e, idx) => `
+        const cards = day.exercises.map((e, idx) => {
+            const vals = e.done ? e.done.split(',').map(v => v.trim()) : [];
+            const count = Math.max(vals.length, guessSeriesCount(e.expected));
+            const boxes = Array.from({ length: count }, (_, b) =>
+                `<input type="text" class="rep-box"
+                        value="${esc(vals[b] || '')}"
+                        placeholder="-"
+                        inputmode="numeric"
+                        data-d="${state.selectedDay}" data-e="${idx}" data-b="${b}"
+                        oninput="updRepBox(this)">`
+            ).join('');
+            return `
             <div class="exercise-card">
                 <span class="ord">${e.order}</span>
                 <span class="nm">${esc(e.name)}</span>
@@ -371,14 +394,14 @@
                     \u{1F3CB}\uFE0F ${esc(e.weight)}
                 </div>
                 <div class="reps-row">
-                    <span class="reps-lbl">Hecho:</span>
-                    <input type="text" value="${esc(e.done)}"
-                           placeholder="ej: 8, 8, 7, 6"
-                           inputmode="text"
-                           data-d="${state.selectedDay}" data-e="${idx}"
-                           oninput="updReps(this)">
+                    <span class="reps-lbl">Series realizadas:</span>
+                    <div class="reps-boxes" id="boxes-${state.selectedDay}-${idx}">
+                        ${boxes}
+                        <button class="rep-add" onclick="addBox(${state.selectedDay},${idx})">+</button>
+                    </div>
                 </div>
-            </div>`).join('');
+            </div>`;
+        }).join('');
 
         app.innerHTML = `
         <div class="header"><h1>\u{1F4AA} Gym Tracker</h1></div>
@@ -474,13 +497,52 @@
     }
 
     let saveTimer = null;
-    function updReps(el) {
+
+    function validateRepValue(val) {
+        if (val === '' || val === null || val === undefined) return true; // vacío es ok
+        const n = parseInt(val, 10);
+        return /^\d+$/.test(val.trim()) && n >= 1;
+    }
+
+    function guessSeriesCount(expected) {
+        return 4;
+    }
+
+    function collectBoxValues(di, ei) {
+        const container = document.getElementById('boxes-' + di + '-' + ei);
+        if (!container) return state.days[di].exercises[ei].done || '';
+        return Array.from(container.querySelectorAll('.rep-box'))
+            .map(inp => inp.value.trim())
+            .join(',');
+    }
+
+    function updRepBox(el) {
+        const raw = el.value.trim();
+        if (raw !== '' && !validateRepValue(raw)) {
+            el.classList.add('invalid');
+            return; // no guardar valor inválido
+        }
+        el.classList.remove('invalid');
         const di = parseInt(el.dataset.d);
         const ei = parseInt(el.dataset.e);
-        state.days[di].exercises[ei].done = el.value;
-        // Debounce save
+        state.days[di].exercises[ei].done = collectBoxValues(di, ei);
         clearTimeout(saveTimer);
         saveTimer = setTimeout(() => save(), 300);
+    }
+
+    function addBox(di, ei) {
+        const container = document.getElementById('boxes-' + di + '-' + ei);
+        if (!container) return;
+        const b = container.querySelectorAll('.rep-box').length;
+        const inp = document.createElement('input');
+        inp.type = 'text'; inp.className = 'rep-box';
+        inp.placeholder = '-';
+        inp.inputMode = 'numeric';
+        inp.dataset.d = di; inp.dataset.e = ei; inp.dataset.b = b;
+        inp.addEventListener('input', function() { updRepBox(this); });
+        // Insertar antes del botón +
+        container.insertBefore(inp, container.querySelector('.rep-add'));
+        inp.focus();
     }
 
     function showView() { state.screen = 'view'; render(); }
@@ -531,7 +593,7 @@
         monday.setDate(loadedAt.getDate() + mondayOff);
 
         const days = state.days && state.days.length ? state.days : [];
-        const fmt  = d => d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
+        const fmt  = d => String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0');
 
         const firstDate = days.length ? getDayDate(days[0].name, monday) : null;
         const lastDate  = days.length ? getDayDate(days[days.length - 1].name, monday) : null;
