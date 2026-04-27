@@ -60,7 +60,9 @@ function parseRoutine(text) {
         const expected = colM[2].trim();
         const wM = right.match(/^Peso:\s*([^|]+)/i);
         const weight = wM ? wM[1].trim() : right.split('|')[0].trim();
-        cur.exercises.push({ order, name, expected, weight, done: '' });
+        const notesM = right.match(/\|\s*Notas:\s*(.+)$/i);
+        const comment = notesM ? notesM[1].trim() : '';
+        cur.exercises.push({ order, name, expected, weight, done: '', comment });
     }
     return days;
 }
@@ -75,6 +77,7 @@ function genText(days) {
             t += e.order + '. **' + e.name + ':** ' + e.expected + ' | Peso: ' + e.weight;
             if (e.done && e.done.trim()) t += ' | Hecho: ' + e.done.trim();
             else t += ' | Hecho: —';
+            if (e.comment && e.comment.trim()) t += ' | Notas: ' + e.comment.trim();
             t += '\n';
         }
         t += '\n';
@@ -590,6 +593,209 @@ suite('Rutinas que no empiezan en LUNES', () => {
         assertEqual(days2[1].name, 'JUEVES');
     });
 });
+
+/* =========================================================
+   REGRESIÓN — nueva semana sin guardar mantiene fecha real
+   =========================================================
+   Valida el bug: al iniciar una nueva semana sin guardar la anterior,
+   la nueva semana debe usar la fecha del nuevo loadedAt, NO la del viejo.
+   ========================================================= */
+suite('Regresión — nueva semana sin guardar usa fecha correcta', () => {
+
+    // Semana vieja: cargada el lunes 13/04/2026
+    const OLD_LOADED_AT  = new Date(2026, 3, 13).toISOString(); // lunes 13 abr
+    // Semana nueva: cargada el lunes 27/04/2026 (dos semanas después)
+    const NEW_LOADED_AT  = new Date(2026, 3, 27).toISOString(); // lunes 27 abr
+
+    test('getDateRange con loadedAt VIEJO muestra semana 13/04', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE); // LUNES y MARTES
+        const range = getDateRange(days, OLD_LOADED_AT);
+        assertEqual(range.from, '13/04', 'vieja: from debe ser LUNES 13/04');
+        assertEqual(range.to,   '14/04', 'vieja: to debe ser MARTES 14/04');
+    });
+
+    test('getDateRange con loadedAt NUEVO muestra semana 27/04, no 13/04', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE); // LUNES y MARTES
+        const range = getDateRange(days, NEW_LOADED_AT);
+        assertEqual(range.from, '27/04', 'nueva: from debe ser LUNES 27/04');
+        assertEqual(range.to,   '28/04', 'nueva: to debe ser MARTES 28/04');
+    });
+
+    test('La fecha de la semana nueva es DISTINTA a la de la semana vieja', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE);
+        const oldRange = getDateRange(days, OLD_LOADED_AT);
+        const newRange = getDateRange(days, NEW_LOADED_AT);
+        assert(oldRange.from !== newRange.from,
+            'from viejo (' + oldRange.from + ') debe diferir del nuevo (' + newRange.from + ')');
+        assert(oldRange.to !== newRange.to,
+            'to viejo (' + oldRange.to + ') debe diferir del nuevo (' + newRange.to + ')');
+    });
+
+    test('getDateRange con loadedAt null usa fecha actual (no fecha antigua)', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE);
+        // loadedAt muy antigua: enero 2020
+        const ancientLoadedAt = new Date(2020, 0, 6).toISOString(); // lunes 06/01/2020
+        const ancientRange = getDateRange(days, ancientLoadedAt);
+        const nullRange    = getDateRange(days, null);
+        // Con null debe usar new Date(), que en 2026+ jamás daría semana de enero 2020
+        assert(nullRange.from !== ancientRange.from,
+            'null no debe dar la misma fecha que un loadedAt de 2020 (' + ancientRange.from + ')');
+    });
+
+    test('getDateRange con loadedAt undefined usa fecha actual (no fecha antigua)', () => {
+        const days = parseRoutine(SAMPLE_ROUTINE);
+        const ancientLoadedAt = new Date(2020, 0, 6).toISOString();
+        const ancientRange   = getDateRange(days, ancientLoadedAt);
+        const undefinedRange = getDateRange(days, undefined);
+        assert(undefinedRange.from !== ancientRange.from,
+            'undefined no debe dar la misma fecha que un loadedAt de 2020 (' + ancientRange.from + ')');
+    });
+
+    test('Semana nueva (LUN-VIE) con nuevo loadedAt muestra rango correcto', () => {
+        // Rutina LUN-MAR-MIE-JUE-VIE, cargada el lunes 27/04/2026
+        const txt = '### **LUNES\n\n1. **EjA:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **MARTES\n\n1. **EjB:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **MIERCOLES\n\n1. **EjC:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **JUEVES\n\n1. **EjD:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjE:** 3 x 8 | Peso: 10 kg';
+        const days = parseRoutine(txt);
+        const range = getDateRange(days, NEW_LOADED_AT);
+        assertEqual(range.from, '27/04', 'from = LUNES 27/04');
+        assertEqual(range.to,   '01/05', 'to = VIERNES 01/05');
+    });
+
+    test('Misma rutina con distinto loadedAt produce distintos rangos (mismo template, semanas distintas)', () => {
+        // Simula el caso exacto del bug: misma plantilla de rutina usada dos semanas seguidas
+        const days1 = parseRoutine(SAMPLE_ROUTINE);
+        const days2 = parseRoutine(SAMPLE_ROUTINE);
+        const rangeWeek1 = getDateRange(days1, OLD_LOADED_AT); // sem. 13/04
+        const rangeWeek2 = getDateRange(days2, NEW_LOADED_AT); // sem. 27/04
+        assert(rangeWeek1.from !== rangeWeek2.from,
+            'Misma rutina en semanas distintas debe mostrar fechas distintas');
+        assertEqual(rangeWeek1.from, '13/04');
+        assertEqual(rangeWeek2.from, '27/04');
+    });
+});
+
+/* =========================================================
+   COMENTARIOS POR EJERCICIO — nueva funcionalidad
+   ========================================================= */
+suite('Comentario por ejercicio — parseo, generación y round-trip', () => {
+
+    test('Ejercicio sin notas: comment es string vacío', () => {
+        const days = parseRoutine('### **LUNES\n\n1. **Press:** 3 series x 8 reps | Peso: 80 kg');
+        const e = days[0].exercises[0];
+        assertEqual(typeof e.comment, 'string', 'comment debe ser string');
+        assertEqual(e.comment, '', 'sin notas, comment vacío');
+    });
+
+    test('Parse: comentario simple', () => {
+        const txt = '### **LUNES\n\n1. **Press:** 3 series x 8 reps | Peso: 80 kg | Hecho: 8,7,6 | Notas: hombro molesto en la última serie';
+        const days = parseRoutine(txt);
+        assertEqual(days[0].exercises[0].comment, 'hombro molesto en la última serie');
+    });
+
+    test('Parse: comentario con varias palabras y signos', () => {
+        const txt = '### **LUNES\n\n1. **Press:** 3 series x 8 reps | Peso: 80 kg | Hecho: 8,7,6 | Notas: cansé rápido (5ª rep), buen control';
+        const days = parseRoutine(txt);
+        assertEqual(days[0].exercises[0].comment, 'cansé rápido (5ª rep), buen control');
+    });
+
+    test('Parse: comentario con ";" interno se preserva entero', () => {
+        const txt = '### **LUNES\n\n1. **Press:** 3 series x 8 reps | Peso: 80 kg | Hecho: 8,7,6 | Notas: lento; muy controlado; bien';
+        const days = parseRoutine(txt);
+        assertEqual(days[0].exercises[0].comment, 'lento; muy controlado; bien');
+    });
+
+    test('genText: omite "| Notas:" si comment está vacío', () => {
+        const days = parseRoutine('### **LUNES\n\n1. **Press:** 3 series x 8 reps | Peso: 80 kg');
+        const txt = genText(days);
+        assert(!txt.includes('Notas:'), 'no debe haber Notas si comment vacío');
+    });
+
+    test('genText: omite "| Notas:" si comment es solo espacios', () => {
+        const days = parseRoutine('### **LUNES\n\n1. **Press:** 3 series x 8 reps | Peso: 80 kg');
+        days[0].exercises[0].comment = '   ';
+        const txt = genText(days);
+        assert(!txt.includes('Notas:'), 'comment con solo whitespace no debe emitir Notas');
+    });
+
+    test('genText: emite "| Notas: <texto>" cuando hay comentario', () => {
+        const days = parseRoutine('### **LUNES\n\n1. **Press:** 3 series x 8 reps | Peso: 80 kg');
+        days[0].exercises[0].done = '8,7,6';
+        days[0].exercises[0].comment = 'hombro molesto';
+        const txt = genText(days);
+        assertIncludes(txt, '| Notas: hombro molesto');
+    });
+
+    test('genText: trimea el comentario al imprimir', () => {
+        const days = parseRoutine('### **LUNES\n\n1. **Press:** 3 series x 8 reps | Peso: 80 kg');
+        days[0].exercises[0].comment = '  con espacios  ';
+        const txt = genText(days);
+        assertIncludes(txt, '| Notas: con espacios');
+        assert(!txt.includes('| Notas:   con'), 'no debe imprimir espacios al inicio');
+    });
+
+    test('Round-trip: parse → genText → parse preserva comentario', () => {
+        const days = parseRoutine('### **LUNES\n\n1. **Press:** 3 series x 8 reps | Peso: 80 kg');
+        days[0].exercises[0].done = '8,7,6';
+        days[0].exercises[0].comment = 'dolor en hombro, tuve que bajar peso';
+        const txt = genText(days);
+        const days2 = parseRoutine(txt);
+        assertEqual(days2[0].exercises[0].comment, 'dolor en hombro, tuve que bajar peso');
+    });
+
+    test('Round-trip: comentario y peso no se mezclan', () => {
+        const days = parseRoutine('### **LUNES\n\n1. **Press:** 3 series x 8 reps | Peso: 80 kg');
+        days[0].exercises[0].done = '8,7,6';
+        days[0].exercises[0].comment = 'todo bien';
+        const txt = genText(days);
+        const days2 = parseRoutine(txt);
+        assertEqual(days2[0].exercises[0].weight, '80 kg', 'peso intacto');
+        assertEqual(days2[0].exercises[0].comment, 'todo bien', 'nota intacta');
+    });
+
+    test('Comentario con acentos, números y símbolos', () => {
+        const days = parseRoutine('### **LUNES\n\n1. **Press:** 3 series x 8 reps | Peso: 80 kg');
+        days[0].exercises[0].comment = 'tensé hombro al 70% — bajé a 60kg en S3';
+        const txt = genText(days);
+        const days2 = parseRoutine(txt);
+        assertEqual(days2[0].exercises[0].comment, 'tensé hombro al 70% — bajé a 60kg en S3');
+    });
+
+    test('Compatibilidad: ejercicio sin field comment no rompe genText', () => {
+        const days = parseRoutine('### **LUNES\n\n1. **Press:** 3 series x 8 reps | Peso: 80 kg');
+        delete days[0].exercises[0].comment;
+        const txt = genText(days); // no debe lanzar
+        assert(!txt.includes('Notas:'), 'sin comment no debe emitir Notas');
+    });
+
+    test('Compatibilidad: comment === null no rompe', () => {
+        const days = parseRoutine('### **LUNES\n\n1. **Press:** 3 series x 8 reps | Peso: 80 kg');
+        days[0].exercises[0].comment = null;
+        const txt = genText(days);
+        assert(!txt.includes('Notas:'), 'comment null no debe emitir Notas');
+    });
+
+    test('Hecho y Notas conviven en la misma línea, en ese orden', () => {
+        const days = parseRoutine('### **LUNES\n\n1. **Press:** 3 series x 8 reps | Peso: 80 kg');
+        days[0].exercises[0].done = '8,7,6';
+        days[0].exercises[0].comment = 'molestia';
+        const txt = genText(days);
+        assertIncludes(txt, 'Hecho: 8,7,6');
+        assertIncludes(txt, 'Notas: molestia');
+        const idxHecho = txt.indexOf('Hecho:');
+        const idxNotas = txt.indexOf('Notas:');
+        assert(idxHecho < idxNotas, 'Hecho debe ir antes que Notas');
+    });
+
+    test('Notas se conservan por ejercicio (no se cruzan entre ejercicios del mismo día)', () => {
+        const days = parseRoutine('### **LUNES\n\n1. **Press:** 3 x 8 | Peso: 80 kg\n2. **Sentadilla:** 4 x 10 | Peso: 100 kg');
+        days[0].exercises[0].comment = 'pecho ok';
+        days[0].exercises[1].comment = 'rodilla floja';
+        const txt = genText(days);
+        const days2 = parseRoutine(txt);
+        assertEqual(days2[0].exercises[0].comment, 'pecho ok');
+        assertEqual(days2[0].exercises[1].comment, 'rodilla floja');
+    });
+});
+
 /* =========================================================
    RENDER RESULTADOS
    ========================================================= */
