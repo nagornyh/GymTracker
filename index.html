@@ -589,6 +589,7 @@
 
         const cards = day.exercises.map((e, idx) => {
             const vals = e.done ? e.done.split(',').map(v => v.trim()) : [];
+            while (vals.length && vals[vals.length - 1] === '') vals.pop();
             const count = Math.max(vals.length, guessSeriesCount(e.expected));
             const boxes = Array.from({ length: count }, (_, b) => {
                 return `<input type="text" class="rep-box"
@@ -726,7 +727,7 @@
     }
 
     function guessSeriesCount(expected) {
-        return 4;
+        return 3;
     }
 
     function collectBoxValues(di, ei) {
