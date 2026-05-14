@@ -102,18 +102,19 @@ function getDayDate(dayName, monday) {
     return d;
 }
 
-function getDateRange(days, loadedAt) {
-    const loadDate = loadedAt ? new Date(loadedAt) : new Date();
-    const loadDow   = loadDate.getDay();
-    const mondayOff = loadDow === 0 ? -6 : 1 - loadDow;
-    const monday    = new Date(loadDate);
-    monday.setDate(loadDate.getDate() + mondayOff);
+function getDateRange(days, today) {
+    // Usa la fecha del dispositivo (today) para derivar el lunes de la semana actual
+    const refDate = today ? new Date(today) : new Date();
+    const todayDow = refDate.getDay();
+    const mondayOff = todayDow === 0 ? -6 : 1 - todayDow;
+    const monday = new Date(refDate);
+    monday.setDate(refDate.getDate() + mondayOff);
     const fmt = d => String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0');
     const firstDate = days.length ? getDayDate(days[0].name, monday) : null;
     const lastDate  = days.length ? getDayDate(days[days.length - 1].name, monday) : null;
     return {
         from: firstDate ? fmt(firstDate) : fmt(monday),
-        to:   lastDate  ? fmt(lastDate)  : fmt(new Date())
+        to:   lastDate  ? fmt(lastDate)  : fmt(refDate)
     };
 }
 
@@ -404,19 +405,19 @@ suite('getDayDate — cálculo de fecha por nombre de día', () => {
 });
 
 suite('getDateRange — rango de la semana', () => {
-    // Apr 13, 2026 = lunes real (getDay()===1)
-    const MONDAY_LOADED = new Date(2026, 3, 13).toISOString();
+    // Apr 13, 2026 = lunes real (getDay()===1) — simula que "hoy" es ese día
+    const TODAY_MONDAY = new Date(2026, 3, 13).toISOString();
 
-    test('Rutina LUN-MAR cargada el lunes → from=13/04, to=14/04', () => {
+    test('Rutina LUN-MAR, hoy es lunes → from=13/04, to=14/04', () => {
         const days = parseRoutine(SAMPLE_ROUTINE); // LUNES y MARTES
-        const range = getDateRange(days, MONDAY_LOADED);
+        const range = getDateRange(days, TODAY_MONDAY);
         assertEqual(range.from, '13/04', 'from debe ser LUNES 13/04');
         assertEqual(range.to, '14/04', 'to debe ser MARTES 14/04');
     });
 
     test('Rango consistente: from <= to numéricamente', () => {
         const days = parseRoutine(SAMPLE_ROUTINE);
-        const range = getDateRange(days, MONDAY_LOADED);
+        const range = getDateRange(days, TODAY_MONDAY);
         const [fd, fm] = range.from.split('/').map(Number);
         const [td, tm] = range.to.split('/').map(Number);
         const fromNum = fm * 100 + fd;
@@ -425,7 +426,7 @@ suite('getDateRange — rango de la semana', () => {
     });
 
     test('Array vacío no lanza excepción', () => {
-        const range = getDateRange([], MONDAY_LOADED);
+        const range = getDateRange([], TODAY_MONDAY);
         assert(range.from && range.to, 'debe retornar fechas aunque days esté vacío');
     });
 });
@@ -491,11 +492,11 @@ suite('Rutinas con N d\u00edas \u2014 cobertura de casos', () => {
     });
 
     test('getDateRange para 4 días (LUN,MAR,JUE,VIE) da rango correcto', () => {
-        // Apr 13 = lunes real
+        // Apr 13 = lunes real — simula que hoy es ese lunes
         const txt = '### **LUNES\n\n1. **EjA:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **MARTES\n\n1. **EjB:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **JUEVES\n\n1. **EjC:** 3 series x 8 reps | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjD:** 3 series x 8 reps | Peso: 10 kg';
         const days = parseRoutine(txt);
-        const loadedAt = new Date(2026, 3, 13).toISOString();
-        const range = getDateRange(days, loadedAt);
+        const today = new Date(2026, 3, 13).toISOString();
+        const range = getDateRange(days, today);
         assertEqual(range.from, '13/04', 'from = LUNES 13/04');
         assertEqual(range.to, '17/04', 'to = VIERNES 17/04');
     });
@@ -503,17 +504,17 @@ suite('Rutinas con N d\u00edas \u2014 cobertura de casos', () => {
     test('getDateRange para 7 días (LUN-DOM) da rango completo', () => {
         const txt = '### **LUNES\n\n1. **EjA:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **MARTES\n\n1. **EjB:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **MIERCOLES\n\n1. **EjC:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **JUEVES\n\n1. **EjD:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjE:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **SABADO\n\n1. **EjF:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **DOMINGO\n\n1. **EjG:** 3 x 8 | Peso: 10 kg';
         const days = parseRoutine(txt);
-        const loadedAt = new Date(2026, 3, 13).toISOString();
-        const range = getDateRange(days, loadedAt);
+        const today = new Date(2026, 3, 13).toISOString();
+        const range = getDateRange(days, today);
         assertEqual(range.from, '13/04', 'from = LUNES 13/04');
         assertEqual(range.to, '19/04', 'to = DOMINGO 19/04');
     });
 });
 
 suite('Rutinas que no empiezan en LUNES', () => {
-    // Referencia: cargado el lunes real 13/04/2026
+    // Referencia: simula que "hoy" es el lunes 13/04/2026
     // MARTES=14/04, MIERCOLES=15/04, JUEVES=16/04, VIERNES=17/04, SABADO=18/04, DOMINGO=19/04
-    const LOADED_MON = new Date(2026, 3, 13).toISOString();
+    const TODAY_MON = new Date(2026, 3, 13).toISOString();
 
     test('Parse: rutina MARTES-JUEVES-VIERNES (3 días)', () => {
         const txt = '### **MARTES\n\n1. **EjA:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **JUEVES\n\n1. **EjB:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjC:** 3 x 8 | Peso: 10 kg';
@@ -526,7 +527,7 @@ suite('Rutinas que no empiezan en LUNES', () => {
     test('getDateRange: MARTES-VIERNES da 14/04-17/04', () => {
         const txt = '### **MARTES\n\n1. **EjA:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **JUEVES\n\n1. **EjB:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjC:** 3 x 8 | Peso: 10 kg';
         const days = parseRoutine(txt);
-        const range = getDateRange(days, LOADED_MON);
+        const range = getDateRange(days, TODAY_MON);
         assertEqual(range.from, '14/04', 'from = MARTES 14/04');
         assertEqual(range.to, '17/04', 'to = VIERNES 17/04');
     });
@@ -542,7 +543,7 @@ suite('Rutinas que no empiezan en LUNES', () => {
     test('getDateRange: MIERCOLES-SABADO da 15/04-18/04', () => {
         const txt = '### **MIERCOLES\n\n1. **EjA:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **JUEVES\n\n1. **EjB:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjC:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **SABADO\n\n1. **EjD:** 3 x 8 | Peso: 10 kg';
         const days = parseRoutine(txt);
-        const range = getDateRange(days, LOADED_MON);
+        const range = getDateRange(days, TODAY_MON);
         assertEqual(range.from, '15/04', 'from = MIERCOLES 15/04');
         assertEqual(range.to, '18/04', 'to = SABADO 18/04');
     });
@@ -557,7 +558,7 @@ suite('Rutinas que no empiezan en LUNES', () => {
     test('getDateRange: JUEVES-VIERNES da 16/04-17/04', () => {
         const txt = '### **JUEVES\n\n1. **EjA:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjB:** 3 x 8 | Peso: 10 kg';
         const days = parseRoutine(txt);
-        const range = getDateRange(days, LOADED_MON);
+        const range = getDateRange(days, TODAY_MON);
         assertEqual(range.from, '16/04', 'from = JUEVES 16/04');
         assertEqual(range.to, '17/04', 'to = VIERNES 17/04');
     });
@@ -567,7 +568,7 @@ suite('Rutinas que no empiezan en LUNES', () => {
         const days = parseRoutine(txt);
         assertEqual(days.length, 1);
         assertEqual(days[0].name, 'VIERNES');
-        const range = getDateRange(days, LOADED_MON);
+        const range = getDateRange(days, TODAY_MON);
         assertEqual(range.from, '17/04', 'from = VIERNES 17/04');
         assertEqual(range.to, '17/04', 'to = VIERNES 17/04');
     });
@@ -577,7 +578,7 @@ suite('Rutinas que no empiezan en LUNES', () => {
         const days = parseRoutine(txt);
         assertEqual(days.length, 1);
         assertEqual(days[0].name, 'DOMINGO');
-        const range = getDateRange(days, LOADED_MON);
+        const range = getDateRange(days, TODAY_MON);
         assertEqual(range.from, '19/04', 'from = DOMINGO 19/04');
         assertEqual(range.to, '19/04', 'to = DOMINGO 19/04');
     });
@@ -595,81 +596,107 @@ suite('Rutinas que no empiezan en LUNES', () => {
 });
 
 /* =========================================================
-   REGRESIÓN — nueva semana sin guardar mantiene fecha real
+   REGRESIÓN — fecha siempre basada en fecha actual del dispositivo
    =========================================================
-   Valida el bug: al iniciar una nueva semana sin guardar la anterior,
-   la nueva semana debe usar la fecha del nuevo loadedAt, NO la del viejo.
+   Valida que getDateRange SIEMPRE usa la fecha que se le pasa como "hoy"
+   (que en producción es new Date()). No importa cuándo se cargó la rutina:
+   el rango mostrado depende exclusivamente de la fecha actual del dispositivo.
    ========================================================= */
-suite('Regresión — nueva semana sin guardar usa fecha correcta', () => {
+suite('Regresión — fecha basada en fecha actual del dispositivo', () => {
 
-    // Semana vieja: cargada el lunes 13/04/2026
-    const OLD_LOADED_AT  = new Date(2026, 3, 13).toISOString(); // lunes 13 abr
-    // Semana nueva: cargada el lunes 27/04/2026 (dos semanas después)
-    const NEW_LOADED_AT  = new Date(2026, 3, 27).toISOString(); // lunes 27 abr
+    // Simula "hoy" en dos semanas distintas
+    const TODAY_WEEK1 = new Date(2026, 3, 13).toISOString(); // lunes 13 abr
+    const TODAY_WEEK2 = new Date(2026, 3, 27).toISOString(); // lunes 27 abr
 
-    test('getDateRange con loadedAt VIEJO muestra semana 13/04', () => {
+    test('getDateRange con hoy=13/04 muestra semana del 13/04', () => {
         const days = parseRoutine(SAMPLE_ROUTINE); // LUNES y MARTES
-        const range = getDateRange(days, OLD_LOADED_AT);
-        assertEqual(range.from, '13/04', 'vieja: from debe ser LUNES 13/04');
-        assertEqual(range.to,   '14/04', 'vieja: to debe ser MARTES 14/04');
+        const range = getDateRange(days, TODAY_WEEK1);
+        assertEqual(range.from, '13/04', 'from debe ser LUNES 13/04');
+        assertEqual(range.to,   '14/04', 'to debe ser MARTES 14/04');
     });
 
-    test('getDateRange con loadedAt NUEVO muestra semana 27/04, no 13/04', () => {
+    test('getDateRange con hoy=27/04 muestra semana del 27/04', () => {
         const days = parseRoutine(SAMPLE_ROUTINE); // LUNES y MARTES
-        const range = getDateRange(days, NEW_LOADED_AT);
-        assertEqual(range.from, '27/04', 'nueva: from debe ser LUNES 27/04');
-        assertEqual(range.to,   '28/04', 'nueva: to debe ser MARTES 28/04');
+        const range = getDateRange(days, TODAY_WEEK2);
+        assertEqual(range.from, '27/04', 'from debe ser LUNES 27/04');
+        assertEqual(range.to,   '28/04', 'to debe ser MARTES 28/04');
     });
 
-    test('La fecha de la semana nueva es DISTINTA a la de la semana vieja', () => {
+    test('Misma rutina, distinto "hoy" → distintos rangos (fix del bug)', () => {
         const days = parseRoutine(SAMPLE_ROUTINE);
-        const oldRange = getDateRange(days, OLD_LOADED_AT);
-        const newRange = getDateRange(days, NEW_LOADED_AT);
-        assert(oldRange.from !== newRange.from,
-            'from viejo (' + oldRange.from + ') debe diferir del nuevo (' + newRange.from + ')');
-        assert(oldRange.to !== newRange.to,
-            'to viejo (' + oldRange.to + ') debe diferir del nuevo (' + newRange.to + ')');
+        const rangeWeek1 = getDateRange(days, TODAY_WEEK1);
+        const rangeWeek2 = getDateRange(days, TODAY_WEEK2);
+        assert(rangeWeek1.from !== rangeWeek2.from,
+            'from semana 1 (' + rangeWeek1.from + ') debe diferir de semana 2 (' + rangeWeek2.from + ')');
+        assert(rangeWeek1.to !== rangeWeek2.to,
+            'to semana 1 (' + rangeWeek1.to + ') debe diferir de semana 2 (' + rangeWeek2.to + ')');
     });
 
-    test('getDateRange con loadedAt null usa fecha actual (no fecha antigua)', () => {
+    test('getDateRange con null usa fecha actual (no se congela en una fecha vieja)', () => {
         const days = parseRoutine(SAMPLE_ROUTINE);
-        // loadedAt muy antigua: enero 2020
-        const ancientLoadedAt = new Date(2020, 0, 6).toISOString(); // lunes 06/01/2020
-        const ancientRange = getDateRange(days, ancientLoadedAt);
+        const ancientDate = new Date(2020, 0, 6).toISOString(); // lunes 06/01/2020
+        const ancientRange = getDateRange(days, ancientDate);
         const nullRange    = getDateRange(days, null);
         // Con null debe usar new Date(), que en 2026+ jamás daría semana de enero 2020
         assert(nullRange.from !== ancientRange.from,
-            'null no debe dar la misma fecha que un loadedAt de 2020 (' + ancientRange.from + ')');
+            'null no debe dar la misma fecha que un today de 2020 (' + ancientRange.from + ')');
     });
 
-    test('getDateRange con loadedAt undefined usa fecha actual (no fecha antigua)', () => {
+    test('getDateRange con undefined usa fecha actual', () => {
         const days = parseRoutine(SAMPLE_ROUTINE);
-        const ancientLoadedAt = new Date(2020, 0, 6).toISOString();
-        const ancientRange   = getDateRange(days, ancientLoadedAt);
+        const ancientDate = new Date(2020, 0, 6).toISOString();
+        const ancientRange   = getDateRange(days, ancientDate);
         const undefinedRange = getDateRange(days, undefined);
         assert(undefinedRange.from !== ancientRange.from,
-            'undefined no debe dar la misma fecha que un loadedAt de 2020 (' + ancientRange.from + ')');
+            'undefined no debe dar la misma fecha que un today de 2020 (' + ancientRange.from + ')');
     });
 
-    test('Semana nueva (LUN-VIE) con nuevo loadedAt muestra rango correcto', () => {
-        // Rutina LUN-MAR-MIE-JUE-VIE, cargada el lunes 27/04/2026
+    test('Rutina LUN-VIE con hoy=27/04 muestra rango correcto', () => {
         const txt = '### **LUNES\n\n1. **EjA:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **MARTES\n\n1. **EjB:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **MIERCOLES\n\n1. **EjC:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **JUEVES\n\n1. **EjD:** 3 x 8 | Peso: 10 kg\n\n---\n\n### **VIERNES\n\n1. **EjE:** 3 x 8 | Peso: 10 kg';
         const days = parseRoutine(txt);
-        const range = getDateRange(days, NEW_LOADED_AT);
+        const range = getDateRange(days, TODAY_WEEK2);
         assertEqual(range.from, '27/04', 'from = LUNES 27/04');
         assertEqual(range.to,   '01/05', 'to = VIERNES 01/05');
     });
 
-    test('Misma rutina con distinto loadedAt produce distintos rangos (mismo template, semanas distintas)', () => {
+    test('Misma plantilla usada en semanas consecutivas produce rangos distintos', () => {
         // Simula el caso exacto del bug: misma plantilla de rutina usada dos semanas seguidas
         const days1 = parseRoutine(SAMPLE_ROUTINE);
         const days2 = parseRoutine(SAMPLE_ROUTINE);
-        const rangeWeek1 = getDateRange(days1, OLD_LOADED_AT); // sem. 13/04
-        const rangeWeek2 = getDateRange(days2, NEW_LOADED_AT); // sem. 27/04
+        const rangeWeek1 = getDateRange(days1, TODAY_WEEK1);
+        const rangeWeek2 = getDateRange(days2, TODAY_WEEK2);
         assert(rangeWeek1.from !== rangeWeek2.from,
             'Misma rutina en semanas distintas debe mostrar fechas distintas');
         assertEqual(rangeWeek1.from, '13/04');
         assertEqual(rangeWeek2.from, '27/04');
+    });
+
+    test('Fecha derivada de miércoles muestra lunes correcto de esa semana', () => {
+        // Hoy es miércoles 15/04/2026 → lunes de esa semana = 13/04
+        const todayWed = new Date(2026, 3, 15).toISOString();
+        const days = parseRoutine(SAMPLE_ROUTINE); // LUNES y MARTES
+        const range = getDateRange(days, todayWed);
+        assertEqual(range.from, '13/04', 'desde miércoles, lunes = 13/04');
+        assertEqual(range.to, '14/04', 'martes = 14/04');
+    });
+
+    test('Fecha derivada de domingo muestra lunes correcto de esa semana', () => {
+        // Hoy es domingo 19/04/2026 → lunes de esa semana = 13/04
+        const todaySun = new Date(2026, 3, 19).toISOString();
+        const days = parseRoutine(SAMPLE_ROUTINE); // LUNES y MARTES
+        const range = getDateRange(days, todaySun);
+        assertEqual(range.from, '13/04', 'desde domingo, lunes = 13/04');
+        assertEqual(range.to, '14/04', 'martes = 14/04');
+    });
+
+    test('Sin importar cuándo se cargó la rutina, la fecha cambia si hoy cambia', () => {
+        // Este test simula: cargas la rutina el lunes 13, pero la consultas el lunes 20
+        // Como ahora se usa "hoy" y no "loadedAt", el rango debe reflejar la semana del 20
+        const days = parseRoutine(SAMPLE_ROUTINE);
+        const todayNextWeek = new Date(2026, 3, 20).toISOString(); // lunes 20/04
+        const range = getDateRange(days, todayNextWeek);
+        assertEqual(range.from, '20/04', 'from = LUNES 20/04 (semana actual, no la de carga)');
+        assertEqual(range.to,   '21/04', 'to = MARTES 21/04');
     });
 });
 

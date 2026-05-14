@@ -813,13 +813,12 @@
     }
 
     function getDateRange() {
-        const loadedAt = state.loadedAt ? new Date(state.loadedAt) : new Date();
-
-        // Calcular el lunes de la semana en que se cargó la rutina
-        const loadDow   = loadedAt.getDay();
-        const mondayOff = loadDow === 0 ? -6 : 1 - loadDow;
-        const monday    = new Date(loadedAt);
-        monday.setDate(loadedAt.getDate() + mondayOff);
+        // Siempre usar la fecha actual del dispositivo para calcular el rango
+        const today = new Date();
+        const todayDow = today.getDay();
+        const mondayOff = todayDow === 0 ? -6 : 1 - todayDow;
+        const monday = new Date(today);
+        monday.setDate(today.getDate() + mondayOff);
 
         const days = state.days && state.days.length ? state.days : [];
         const fmt  = d => String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0');
@@ -829,7 +828,7 @@
 
         return {
             from: firstDate ? fmt(firstDate) : fmt(monday),
-            to:   lastDate  ? fmt(lastDate)  : fmt(new Date())
+            to:   lastDate  ? fmt(lastDate)  : fmt(today)
         };
     }
 
@@ -854,16 +853,9 @@
     }
 
     function newWeek() {
-        if (!confirm('\u00bfGuardar la semana actual en el historial antes de empezar una nueva?')) {
-            if (confirm('\u00bfBorrar sin guardar? Se perder\u00e1 todo.')) {
-                clearTimeout(saveTimer);
-                state = { screen: 'load', days: [], selectedDay: 0, loadedAt: null };
-                localStorage.removeItem(KEY);
-                render();
-            }
-            return;
-        }
-        // Save to history
+        if (!confirm('\u00bfIniciar una nueva rutina? La actual se guardar\u00e1 en el historial.')) return;
+
+        // Guardar automáticamente en historial
         const label = state.days.map(d => d.name).join(', ');
         const now = new Date();
         const savedAt = now.toLocaleDateString('es-AR') + ' ' + now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
