@@ -36,8 +36,15 @@ class MainActivity : AppCompatActivity() {
                 ): Boolean {
                     val uri = request.url
                     return if (uri.scheme == "mailto") {
-                        val intent = Intent(Intent.ACTION_SENDTO, uri)
-                        startActivity(Intent.createChooser(intent, "Enviar email"))
+                        val sendIntent = Intent(Intent.ACTION_SENDTO, uri).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
+                            addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+                        }
+                        val chooser = Intent.createChooser(sendIntent, "Enviar email").apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        startActivity(chooser)
                         true
                     } else {
                         false
