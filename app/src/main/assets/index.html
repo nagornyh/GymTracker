@@ -846,6 +846,13 @@
         const subject = 'Resultados GYM: ' + range.from + ' - ' + range.to;
         const body    = genText();
 
+        // Preferred path in APK: native bridge with ACTION_SEND and extras.
+        if (window.AndroidBridge && typeof window.AndroidBridge.sendEmail === 'function') {
+            window.AndroidBridge.sendEmail(email, subject, body);
+            return;
+        }
+
+        // Fallback for browser environments.
         const url = 'mailto:' + encodeURIComponent(email)
                   + '?subject=' + encodeURIComponent(subject)
                   + '&body='    + encodeURIComponent(body);
